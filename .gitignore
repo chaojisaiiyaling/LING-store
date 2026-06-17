@@ -1,0 +1,15 @@
+.venv/
+.deploy_check_venv/
+__pycache__/
+pycache/
+*.pyc
+.DS_Store
+.env
+.streamlit/secrets.toml
+data/cache/
+outputs/
+results/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+Library/
