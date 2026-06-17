@@ -41,8 +41,8 @@ def _build_strategy(strategy_name: str):
 
 
 def main() -> None:
-    st.set_page_config(page_title="中国A股简易回测系统", page_icon="📈", layout="centered")
-    st.title("中国A股简易回测系统")
+    st.set_page_config(page_title="凌氏资本时间空间交易系统", page_icon="📈", layout="centered")
+    st.title("凌氏资本时间空间交易系统")
 
     symbol = st.text_input("股票代码", value="000001", help="例如 000001、600519")
     today = date.today()
