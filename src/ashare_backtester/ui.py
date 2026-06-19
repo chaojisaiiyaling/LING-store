@@ -180,8 +180,6 @@ def main() -> None:
     stock_name = _cached_stock_name(symbol)
     if stock_name:
         st.caption(f"已识别：{stock_name}")
-    elif symbol:
-        st.caption("暂未识别股票名称，不影响继续回测。")
     data_source = st.selectbox("数据接口", list(DATA_SOURCE_OPTIONS.keys()))
     selected_source = DATA_SOURCE_OPTIONS[data_source]
     st.caption(selected_source["description"])
