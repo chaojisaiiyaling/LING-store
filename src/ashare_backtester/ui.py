@@ -17,17 +17,45 @@ from ashare_backtester.reports.charts import indicator_chart, nav_chart, price_s
 from ashare_backtester.strategies import KDJStrategy, MACDStrategy, MAStrategy
 
 
+STRATEGY_DESCRIPTIONS = {
+    "KDJ低位金叉": {
+        "buy": "K线上穿D线，且K值小于30",
+        "sell": "K线下穿D线，或K值大于80",
+    },
+    "MACD零轴上方金叉": {
+        "buy": "DIF上穿DEA，且DIF大于0，DEA大于0",
+        "sell": "DIF下穿DEA",
+    },
+    "MA5/MA10短线金叉": {
+        "buy": "MA5上穿MA10",
+        "sell": "MA5下穿MA10",
+    },
+    "MA5/MA20趋势突破": {
+        "buy": "MA5上穿MA20",
+        "sell": "MA5下穿MA20",
+    },
+    "MA5/MA10/MA20多头排列": {
+        "buy": "MA5 > MA10 > MA20，且收盘价大于MA5",
+        "sell": "收盘价跌破MA20，或MA5下穿MA10",
+    },
+    "乖离率超跌反弹": {
+        "buy": "BIAS20小于-8%，且收盘价重新站上MA5",
+        "sell": "BIAS20大于8%，或收盘价跌破MA10",
+    },
+}
+
+
 def _format_pct(value: float) -> str:
     return f"{value * 100:.2f}%"
 
 
 def _build_strategy(strategy_name: str):
-    if strategy_name == "KDJ金叉死叉":
+    if strategy_name == "KDJ低位金叉":
         period = st.number_input("KDJ周期", min_value=2, max_value=120, value=9, step=1, key="kdj_period")
         k_smooth = st.number_input("K平滑参数", min_value=1, max_value=30, value=3, step=1, key="kdj_k")
         d_smooth = st.number_input("D平滑参数", min_value=1, max_value=30, value=3, step=1, key="kdj_d")
         return KDJStrategy(period, k_smooth, d_smooth)
-    if strategy_name == "MACD金叉死叉":
+    if strategy_name == "MACD零轴上方金叉":
         fast = st.number_input("fast", min_value=2, max_value=120, value=12, step=1, key="macd_fast")
         slow = st.number_input("slow", min_value=3, max_value=240, value=26, step=1, key="macd_slow")
         signal = st.number_input("signal", min_value=2, max_value=120, value=9, step=1, key="macd_signal")
@@ -35,11 +63,25 @@ def _build_strategy(strategy_name: str):
             st.warning("fast 应小于 slow。")
         return MACDStrategy(fast, slow, signal)
     mode = {
-        "MA5上穿MA10": "ma5_ma10",
-        "MA5上穿MA20": "ma5_ma20",
+        "MA5/MA10短线金叉": "ma5_ma10",
+        "MA5/MA20趋势突破": "ma5_ma20",
         "MA5/MA10/MA20多头排列": "bullish",
+        "乖离率超跌反弹": "bias_rebound",
     }[strategy_name]
     return MAStrategy(mode)
+
+
+def _show_strategy_description(strategy_name: str) -> None:
+    description = STRATEGY_DESCRIPTIONS[strategy_name]
+    st.markdown(
+        f"""
+        <div class="strategy-note">
+          <div><strong>买入条件：</strong>{description["buy"]}</div>
+          <div><strong>卖出条件：</strong>{description["sell"]}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def main() -> None:
@@ -61,6 +103,14 @@ def main() -> None:
         [data-testid="stMetricLabel"] {
             font-size: 0.86rem;
         }
+        .strategy-note {
+            border: 1px solid #d1d5db;
+            background: #f9fafb;
+            border-radius: 8px;
+            padding: 0.8rem 0.9rem;
+            line-height: 1.7;
+            margin: 0.2rem 0 1rem 0;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -74,8 +124,11 @@ def main() -> None:
     initial_cash = st.number_input("初始资金", min_value=1000.0, value=DEFAULT_INITIAL_CASH, step=10000.0)
     strategy_name = st.selectbox(
         "策略选择",
-        ["KDJ金叉死叉", "MACD金叉死叉", "MA5上穿MA10", "MA5上穿MA20", "MA5/MA10/MA20多头排列"],
+        list(STRATEGY_DESCRIPTIONS.keys()),
     )
+
+    st.subheader("策略说明")
+    _show_strategy_description(strategy_name)
 
     st.subheader("策略参数")
     strategy = _build_strategy(strategy_name)

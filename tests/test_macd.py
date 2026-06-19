@@ -27,10 +27,13 @@ def test_macd_calculation_correct():
     assert round(result.loc[1, "MACD"], 4) == 0.1111
 
 
-def test_macd_golden_cross_correct():
-    df = sample_df([10, 9, 8, 9, 10, 11, 12, 13])
+def test_macd_above_zero_golden_cross_correct():
+    df = sample_df([10, 11, 12, 11, 10, 11, 12, 13, 14])
     result = MACDStrategy(fast=2, slow=4, signal=2).generate_signals(df)
-    assert (result["signal"] == 1).any()
+    buy_rows = result[result["signal"] == 1]
+    assert not buy_rows.empty
+    assert (buy_rows["DIF"] > 0).all()
+    assert (buy_rows["DEA"] > 0).all()
 
 
 def test_macd_death_cross_correct():
