@@ -20,9 +20,17 @@ class BacktestResult:
 
 
 class BacktestEngine:
-    def __init__(self, initial_cash: float = 100000.0, broker_config: BrokerConfig | None = None):
+    def __init__(
+        self,
+        initial_cash: float = 100000.0,
+        broker_config: BrokerConfig | None = None,
+        stop_loss_pct: float | None = None,
+        take_profit_pct: float | None = None,
+    ):
         self.initial_cash = float(initial_cash)
         self.broker_config = broker_config or BrokerConfig()
+        self.stop_loss_pct = stop_loss_pct
+        self.take_profit_pct = take_profit_pct
 
     def run(self, df: pd.DataFrame, strategy: Strategy, symbol: str = "") -> BacktestResult:
         if len(df) < 2:
@@ -31,6 +39,7 @@ class BacktestEngine:
         bars = strategy.generate_signals(df).copy().reset_index(drop=True)
         cash = self.initial_cash
         shares = 0
+        entry_price: float | None = None
         trades: list[dict] = []
         equity_values: list[float] = []
         position_values: list[float] = []
@@ -38,6 +47,16 @@ class BacktestEngine:
         for i, row in bars.iterrows():
             if i > 0:
                 prev_signal = int(bars.loc[i - 1, "signal"])
+                sell_reason = "SIGNAL"
+                if shares > 0 and entry_price:
+                    prev_close = float(bars.loc[i - 1, "close"])
+                    if self.stop_loss_pct and prev_close <= entry_price * (1 - self.stop_loss_pct):
+                        prev_signal = -1
+                        sell_reason = "STOP_LOSS"
+                    elif self.take_profit_pct and prev_close >= entry_price * (1 + self.take_profit_pct):
+                        prev_signal = -1
+                        sell_reason = "TAKE_PROFIT"
+
                 if prev_signal == 1 and shares == 0:
                     execution_price = float(row["open"]) * (1 + self.broker_config.slippage_rate)
                     qty = calculate_lot_size(cash, float(row["open"]), self.broker_config)
@@ -46,6 +65,7 @@ class BacktestEngine:
                     if qty > 0 and gross + commission <= cash:
                         cash -= gross + commission
                         shares += qty
+                        entry_price = execution_price
                         trades.append(
                             {
                                 "trade_date": row["trade_date"],
@@ -56,6 +76,7 @@ class BacktestEngine:
                                 "commission": commission,
                                 "stamp_tax": 0.0,
                                 "signal_date": bars.loc[i - 1, "trade_date"],
+                                "reason": "SIGNAL",
                             }
                         )
                 elif prev_signal == -1 and shares > 0:
@@ -73,9 +94,11 @@ class BacktestEngine:
                             "commission": commission,
                             "stamp_tax": stamp_tax,
                             "signal_date": bars.loc[i - 1, "trade_date"],
+                            "reason": sell_reason,
                         }
                     )
                     shares = 0
+                    entry_price = None
 
             position_value = shares * float(row["close"])
             position_values.append(position_value)
@@ -88,7 +111,7 @@ class BacktestEngine:
 
         trades_df = pd.DataFrame(
             trades,
-            columns=["trade_date", "signal_date", "side", "price", "shares", "amount", "commission", "stamp_tax"],
+            columns=["trade_date", "signal_date", "side", "price", "shares", "amount", "commission", "stamp_tax", "reason"],
         )
         metrics = calculate_metrics(bars["equity"], trades_df, self.initial_cash)
         buy_hold_return = float(bars["close"].iloc[-1] / bars["close"].iloc[0] - 1)

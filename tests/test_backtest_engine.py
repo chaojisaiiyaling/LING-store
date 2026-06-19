@@ -51,3 +51,25 @@ def test_costs_min_commission_and_stamp_tax_correct():
     commission, stamp_tax = sell_costs(10000, config)
     assert commission == 5
     assert stamp_tax == 10
+
+
+def test_stop_loss_executes_next_day_open_without_lookahead():
+    df = pd.DataFrame(
+        {
+            "trade_date": pd.date_range("2024-01-01", periods=4, freq="D"),
+            "open": [10, 10, 9, 8],
+            "high": [10, 10, 9, 8],
+            "low": [10, 10, 9, 8],
+            "close": [10, 9, 8, 8],
+            "volume": 1000,
+            "amount": 10000,
+        }
+    )
+    result = BacktestEngine(100000, BrokerConfig(slippage_rate=0), stop_loss_pct=0.1).run(
+        df,
+        FixedSignalStrategy([1, 0, 0, 0]),
+    )
+    assert result.trades.loc[1, "signal_date"] == pd.Timestamp("2024-01-02")
+    assert result.trades.loc[1, "trade_date"] == pd.Timestamp("2024-01-03")
+    assert result.trades.loc[1, "price"] == 9
+    assert result.trades.loc[1, "reason"] == "STOP_LOSS"
