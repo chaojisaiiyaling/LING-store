@@ -13,6 +13,7 @@ from ashare_backtester.config import (
 from ashare_backtester.data import DATA_SOURCE_OPTIONS, build_data_provider
 from ashare_backtester.engine.backtest_engine import BacktestEngine
 from ashare_backtester.engine.broker import BrokerConfig
+from ashare_backtester.engine.suitability import evaluate_strategy_suitability
 from ashare_backtester.reports.charts import indicator_chart, nav_chart, price_signal_chart
 from ashare_backtester.strategies import KDJStrategy, MACDStrategy, MAStrategy
 
@@ -233,6 +234,7 @@ def main() -> None:
     metrics = result.metrics
     final_equity = float(result.bars["equity"].iloc[-1])
     profit_loss = final_equity - float(initial_cash)
+    suitability = evaluate_strategy_suitability(result.bars, strategy_name)
 
     col1, col2 = st.columns(2, gap="small")
     col1.metric("初始资金", _format_money(initial_cash))
@@ -244,6 +246,18 @@ def main() -> None:
     col1.metric("胜率", _format_pct(metrics["win_rate"]))
     col2.metric("交易次数", str(metrics["trade_count"]))
     st.metric("买入并持有收益率", _format_pct(result.buy_hold_return))
+
+    st.subheader("策略适配评分")
+    st.metric("当前股票与策略适配度", f"{suitability['score']}分", delta=str(suitability["level"]))
+    st.markdown(
+        f"""
+        <div class="strategy-note">
+          <div><strong>判断：</strong>{suitability["summary"]}</div>
+          <div><strong>依据：</strong>{"；".join(suitability["details"])}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     tab_nav, tab_price, tab_indicator, tab_trades = st.tabs(["净值", "买卖点", "指标", "交易"])
     with tab_nav:
