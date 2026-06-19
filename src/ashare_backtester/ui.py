@@ -14,6 +14,7 @@ from ashare_backtester.config import (
 )
 from ashare_backtester.data import DATA_SOURCE_OPTIONS, build_data_provider
 from ashare_backtester.data.stock_info import lookup_stock_name
+from ashare_backtester.engine.atr_risk import calculate_atr_risk
 from ashare_backtester.engine.backtest_engine import BacktestEngine
 from ashare_backtester.engine.broker import BrokerConfig
 from ashare_backtester.engine.suitability import evaluate_strategy_suitability
@@ -97,6 +98,10 @@ def _format_money(value: float) -> str:
     return f"¥{value:,.2f}"
 
 
+def _format_price(value: float) -> str:
+    return f"{value:.2f}"
+
+
 @st.cache_data(ttl=60 * 60 * 6, show_spinner=False)
 def _cached_stock_name(symbol: str) -> str | None:
     return lookup_stock_name(symbol)
@@ -143,6 +148,73 @@ def _show_strategy_description(strategy_name: str) -> None:
     )
 
 
+def _render_atr_tool(symbol: str, stock_name: str | None, data_source: str, selected_source: dict, start_date: date, end_date: date) -> None:
+    st.subheader("ATR止盈止损测算")
+    st.markdown(
+        """
+        <div class="strategy-note">
+          <div><strong>功能说明：</strong>根据最近14个交易日的真实波动幅度，给出止损、止盈和移动止盈参考。</div>
+          <div><strong>注意：</strong>ATR不是买卖信号，也不预测涨跌，只衡量正常波动范围。</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    run = st.button("开始测算", use_container_width=True, type="primary")
+    if not run:
+        return
+
+    if start_date >= end_date:
+        st.error("开始日期必须早于结束日期。")
+        return
+    if not selected_source["enabled"]:
+        st.error("该数据接口当前版本尚未接入，请先选择 AKShare 或 BaoStock。")
+        return
+
+    try:
+        with st.spinner("正在获取行情并计算ATR..."):
+            provider = build_data_provider(data_source)
+            data = provider.get_daily(symbol, start_date.isoformat(), end_date.isoformat())
+            result = calculate_atr_risk(data)
+    except Exception as exc:
+        st.error(str(exc))
+        return
+
+    display_symbol = f"{symbol} {stock_name}" if stock_name else symbol
+    st.success("ATR测算完成")
+    st.markdown(f"**{display_symbol}** ｜ {start_date.isoformat()} 至 {end_date.isoformat()}")
+
+    col1, col2 = st.columns(2, gap="small")
+    col1.metric("当前收盘价", _format_price(result.close))
+    col2.metric("当前ATR14", _format_price(result.atr14))
+    col1.metric("ATR占比", f"{result.atr_pct:.2f}%")
+    col2.metric("波动等级", result.volatility_level)
+
+    st.subheader("止损建议")
+    stop1, stop2, stop3 = st.columns(3, gap="small")
+    stop1.metric("保守止损价", _format_price(result.conservative_stop))
+    stop2.metric("标准止损价", _format_price(result.standard_stop))
+    stop3.metric("宽松止损价", _format_price(result.loose_stop))
+
+    st.subheader("止盈建议")
+    take1, take2, take3 = st.columns(3, gap="small")
+    take1.metric("短线止盈价", _format_price(result.short_take_profit))
+    take2.metric("标准止盈价", _format_price(result.standard_take_profit))
+    take3.metric("强趋势止盈价", _format_price(result.trend_take_profit))
+
+    st.subheader("移动止盈")
+    st.markdown(
+        f"""
+        <div class="strategy-note">
+          <div><strong>公式：</strong>{result.trailing_stop_formula}</div>
+          <div><strong>示例：</strong>{result.trailing_stop_example}</div>
+          <div><strong>新手解释：</strong>{result.explanation}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def main() -> None:
     st.set_page_config(page_title="凌氏资本时间空间交易系统", page_icon="📈", layout="centered")
     st.markdown(
@@ -176,6 +248,7 @@ def main() -> None:
     )
     st.title("凌氏资本时间空间交易系统")
 
+    feature = st.selectbox("功能选择", ["策略回测", "ATR止盈止损测算"])
     symbol = st.text_input("股票代码", value="000001", help="例如 000001、600519").strip()
     stock_name = _cached_stock_name(symbol)
     if stock_name:
@@ -186,6 +259,11 @@ def main() -> None:
     today = date.today()
     start_date = st.date_input("开始日期", value=date(2026, 1, 1))
     end_date = st.date_input("结束日期", value=today)
+
+    if feature == "ATR止盈止损测算":
+        _render_atr_tool(symbol, stock_name, data_source, selected_source, start_date, end_date)
+        return
+
     initial_cash = st.number_input("初始资金", min_value=1000.0, value=DEFAULT_INITIAL_CASH, step=10000.0)
     strategy_name = st.selectbox(
         "策略选择",
