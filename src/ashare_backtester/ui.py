@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date
 
 import streamlit as st
 
@@ -144,7 +144,7 @@ def main() -> None:
     selected_source = DATA_SOURCE_OPTIONS[data_source]
     st.caption(selected_source["description"])
     today = date.today()
-    start_date = st.date_input("开始日期", value=today - timedelta(days=365 * 3))
+    start_date = st.date_input("开始日期", value=date(2026, 1, 1))
     end_date = st.date_input("结束日期", value=today)
     initial_cash = st.number_input("初始资金", min_value=1000.0, value=DEFAULT_INITIAL_CASH, step=10000.0)
     strategy_name = st.selectbox(
