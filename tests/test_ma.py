@@ -45,17 +45,49 @@ def test_bullish_sell_on_close_below_ma20_or_ma5_cross_ma10():
     assert result["signal"].iloc[-1] == -1
 
 
-def test_bias_rebound_correct():
+def test_bias_conservative_buy_correct():
     df = sample_df([100] * 20 + [70] * 8 + [75, 80, 85])
-    result = MAStrategy("bias_rebound").generate_signals(df)
+    result = MAStrategy("bias_conservative").generate_signals(df)
     buy_rows = result[result["signal"] == 1]
     assert not buy_rows.empty
     assert "BIAS20" in result.columns
-    assert (buy_rows["BIAS20"] < -0.08).all()
+    assert (buy_rows["BIAS20"] < -5).all()
 
 
-def test_bias_rebound_sell_correct():
-    df = sample_df([100] * 20 + [90, 88, 86, 84, 82, 88, 90, 112])
-    result = MAStrategy("bias_rebound").generate_signals(df)
-    assert (result["BIAS20"] > 0.08).any()
-    assert (result.loc[result["BIAS20"] > 0.08, "signal"] == -1).any()
+def test_bias_conservative_sell_correct():
+    df = sample_df([100] * 20 + [70] * 8 + [75, 80, 90, 105])
+    result = MAStrategy("bias_conservative").generate_signals(df)
+    assert (result["BIAS20"] > 5).any()
+    assert (result.loc[result["BIAS20"] > 5, "signal"] == -1).any()
+
+
+def test_bias_standard_buy_and_time_exit_correct():
+    df = sample_df([100] * 20 + [70] * 8 + [75] + [76] * 16)
+    result = MAStrategy("bias_standard").generate_signals(df)
+    buy_index = result.index[result["signal"] == 1][0]
+    sell_index = result.index[result["signal"] == -1][-1]
+    assert result.loc[buy_index, "BIAS20"] < -5
+    assert sell_index - buy_index == 16
+
+
+def test_bias_standard_trailing_exit_correct():
+    df = sample_df([100] * 20 + [70] * 8 + [75, 84, 86, 80])
+    result = MAStrategy("bias_standard").generate_signals(df)
+    assert (result["signal"] == 1).any()
+    assert result["signal"].iloc[-1] == -1
+
+
+def test_bias_aggressive_buy_and_time_exit_correct():
+    df = sample_df([100] * 20 + [70] * 8 + [75] + [88] * 24)
+    result = MAStrategy("bias_aggressive").generate_signals(df)
+    buy_index = result.index[result["signal"] == 1][0]
+    sell_index = result.index[result["signal"] == -1][-1]
+    assert result.loc[buy_index, "BIAS20"] < -8
+    assert sell_index - buy_index == 21
+
+
+def test_bias_aggressive_trailing_exit_correct():
+    df = sample_df([100] * 20 + [70] * 8 + [75, 88, 90, 84])
+    result = MAStrategy("bias_aggressive").generate_signals(df)
+    assert (result["signal"] == 1).any()
+    assert result["signal"].iloc[-1] == -1

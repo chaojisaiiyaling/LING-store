@@ -4,6 +4,40 @@ from ashare_backtester.indicators.ma import add_moving_averages
 from ashare_backtester.strategies.base import Strategy, cross_down, cross_up
 
 
+BIAS_CONFIGS = {
+    "bias_conservative": {
+        "name": "BIAS20超跌反弹-保守",
+        "lookback": 3,
+        "buy_threshold": -5.0,
+        "sell_threshold": 5.0,
+        "sell_ma": "MA10",
+        "max_hold_days": 10,
+        "profit_trigger": None,
+        "drawdown_limit": None,
+    },
+    "bias_standard": {
+        "name": "BIAS20超跌反弹-标准",
+        "lookback": 3,
+        "buy_threshold": -5.0,
+        "sell_threshold": 8.0,
+        "sell_ma": "MA10",
+        "max_hold_days": 15,
+        "profit_trigger": 0.12,
+        "drawdown_limit": 0.05,
+    },
+    "bias_aggressive": {
+        "name": "BIAS20超跌反弹-激进",
+        "lookback": 5,
+        "buy_threshold": -8.0,
+        "sell_threshold": 10.0,
+        "sell_ma": "MA20",
+        "max_hold_days": 20,
+        "profit_trigger": 0.15,
+        "drawdown_limit": 0.06,
+    },
+}
+
+
 class MAStrategy(Strategy):
     def __init__(self, mode: str):
         self.mode = mode
@@ -11,7 +45,7 @@ class MAStrategy(Strategy):
             "ma5_ma10": "MA5/MA10短线金叉",
             "ma5_ma20": "MA5/MA20趋势突破",
             "bullish": "MA5/MA10/MA20多头排列",
-            "bias_rebound": "乖离率超跌反弹",
+            **{mode_name: config["name"] for mode_name, config in BIAS_CONFIGS.items()},
         }[mode]
 
     def generate_signals(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -29,7 +63,48 @@ class MAStrategy(Strategy):
             result.loc[(~was_bullish) & bullish, "signal"] = 1
             result.loc[(result["close"] < result["MA20"]) | cross_down(result["MA5"], result["MA10"]), "signal"] = -1
         else:
-            result["BIAS20"] = (result["close"] - result["MA20"]) / result["MA20"]
-            result.loc[(result["BIAS20"] < -0.08) & cross_up(result["close"], result["MA5"]), "signal"] = 1
-            result.loc[(result["BIAS20"] > 0.08) | (result["close"] < result["MA10"]), "signal"] = -1
+            result = self._generate_bias_signals(result)
+        return result
+
+    def _generate_bias_signals(self, result: pd.DataFrame) -> pd.DataFrame:
+        config = BIAS_CONFIGS[self.mode]
+        result["BIAS20"] = (result["close"] - result["MA20"]) / result["MA20"] * 100
+        recent_oversold = result["BIAS20"].rolling(config["lookback"], min_periods=1).min() < config["buy_threshold"]
+        close_cross_ma5 = cross_up(result["close"], result["MA5"])
+        close_up = result["close"] > result["close"].shift(1)
+        raw_buy = recent_oversold & close_cross_ma5 & close_up
+
+        in_position = False
+        entry_close = 0.0
+        peak_return = 0.0
+        hold_days = 0
+        signals = []
+
+        for i, row in result.iterrows():
+            signal = 0
+            close = float(row["close"])
+            if in_position:
+                hold_days += 1
+                current_return = close / entry_close - 1 if entry_close > 0 else 0.0
+                peak_return = max(peak_return, current_return)
+                trailing_exit = False
+                if config["profit_trigger"] is not None and peak_return >= config["profit_trigger"]:
+                    trailing_exit = peak_return - current_return > config["drawdown_limit"]
+                if (
+                    row["BIAS20"] > config["sell_threshold"]
+                    or close < float(row[config["sell_ma"]])
+                    or hold_days > config["max_hold_days"]
+                    or trailing_exit
+                ):
+                    signal = -1
+                    in_position = False
+            elif bool(raw_buy.iloc[i]):
+                signal = 1
+                in_position = True
+                entry_close = close
+                peak_return = 0.0
+                hold_days = 0
+            signals.append(signal)
+
+        result["signal"] = signals
         return result

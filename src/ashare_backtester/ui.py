@@ -38,9 +38,23 @@ STRATEGY_DESCRIPTIONS = {
         "buy": "MA5 > MA10 > MA20，且收盘价大于MA5",
         "sell": "收盘价跌破MA20，或MA5下穿MA10",
     },
-    "乖离率超跌反弹": {
-        "buy": "BIAS20小于-8%，且收盘价重新站上MA5",
-        "sell": "BIAS20大于8%，或收盘价跌破MA10",
+    "BIAS20超跌反弹-保守": {
+        "buy": "最近3个交易日内，BIAS20曾经小于-5；今日收盘价重新站上MA5；今日收盘价高于昨日收盘价",
+        "sell": "BIAS20大于5；或收盘价跌破MA10；或持仓超过10个交易日",
+        "scene": "短线超跌反弹，快进快出。",
+        "risk": "卖出较快，可能错过后续大反弹。",
+    },
+    "BIAS20超跌反弹-标准": {
+        "buy": "最近3个交易日内，BIAS20曾经小于-5；今日收盘价重新站上MA5；今日收盘价高于昨日收盘价",
+        "sell": "BIAS20大于8；或收盘价跌破MA10；或持仓超过15个交易日；或持仓收益率达到12%后，从最高收益回撤超过5%",
+        "scene": "普通超跌反弹，平衡交易次数和收益空间。",
+        "risk": "震荡下跌行情中可能出现反复假反弹。",
+    },
+    "BIAS20超跌反弹-激进": {
+        "buy": "最近5个交易日内，BIAS20曾经小于-8；今日收盘价重新站上MA5；今日收盘价高于昨日收盘价",
+        "sell": "BIAS20大于10；或收盘价跌破MA20；或持仓超过20个交易日；或持仓收益率达到15%后，从最高收益回撤超过6%",
+        "scene": "深度超跌后的反弹修复。",
+        "risk": "买入信号较少，且如果趋势继续下跌，回撤可能较大。",
     },
 }
 
@@ -70,7 +84,9 @@ def _build_strategy(strategy_name: str):
         "MA5/MA10短线金叉": "ma5_ma10",
         "MA5/MA20趋势突破": "ma5_ma20",
         "MA5/MA10/MA20多头排列": "bullish",
-        "乖离率超跌反弹": "bias_rebound",
+        "BIAS20超跌反弹-保守": "bias_conservative",
+        "BIAS20超跌反弹-标准": "bias_standard",
+        "BIAS20超跌反弹-激进": "bias_aggressive",
     }[strategy_name]
     return MAStrategy(mode)
 
@@ -82,6 +98,8 @@ def _show_strategy_description(strategy_name: str) -> None:
         <div class="strategy-note">
           <div><strong>买入条件：</strong>{description["buy"]}</div>
           <div><strong>卖出条件：</strong>{description["sell"]}</div>
+          <div><strong>适用场景：</strong>{description.get("scene", "按固定技术条件执行。")}</div>
+          <div><strong>风险提示：</strong>{description.get("risk", "技术指标可能出现假信号，请结合风险控制。")}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -175,6 +193,8 @@ def main() -> None:
 
     st.success("回测完成")
     st.markdown(f"**{symbol}** ｜ {start_date.isoformat()} 至 {end_date.isoformat()} ｜ {result.strategy_name}")
+    if not (result.bars["signal"] == 1).any():
+        st.info("当前策略参数下未触发买入信号，可尝试选择更保守版本或延长回测周期。")
 
     metrics = result.metrics
     final_equity = float(result.bars["equity"].iloc[-1])

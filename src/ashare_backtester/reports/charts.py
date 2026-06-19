@@ -32,12 +32,12 @@ def indicator_chart(bars, strategy_key):
         fig.add_trace(go.Bar(x=bars["trade_date"], y=bars["MACD"], name="MACD柱"))
         fig.add_trace(go.Scatter(x=bars["trade_date"], y=bars["DIF"], name="DIF"))
         fig.add_trace(go.Scatter(x=bars["trade_date"], y=bars["DEA"], name="DEA"))
-    elif strategy_key == "乖离率超跌反弹":
+    elif strategy_key.startswith("BIAS20超跌反弹"):
         fig = make_subplots(specs=[[{"secondary_y": True}]])
         fig.add_trace(go.Scatter(x=bars["trade_date"], y=bars["close"], name="收盘价"), secondary_y=False)
         for col in ["MA5", "MA10", "MA20"]:
             fig.add_trace(go.Scatter(x=bars["trade_date"], y=bars[col], name=col), secondary_y=False)
-        fig.add_trace(go.Scatter(x=bars["trade_date"], y=bars["BIAS20"] * 100, name="BIAS20(%)"), secondary_y=True)
+        fig.add_trace(go.Scatter(x=bars["trade_date"], y=bars["BIAS20"], name="BIAS20"), secondary_y=True)
     else:
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=bars["trade_date"], y=bars["close"], name="收盘价"))
