@@ -102,11 +102,6 @@ def _format_price(value: float) -> str:
     return f"{value:.2f}"
 
 
-@st.cache_data(ttl=60 * 60 * 6, show_spinner=False)
-def _cached_stock_name_after_run(symbol: str) -> str | None:
-    return lookup_stock_name(symbol, allow_remote=True)
-
-
 def _build_strategy(strategy_name: str):
     if strategy_name == "KDJ低位金叉":
         period = st.number_input("KDJ周期", min_value=2, max_value=120, value=9, step=1, key="kdj_period")
@@ -175,7 +170,7 @@ def _render_atr_tool(symbol: str, data_source: str, selected_source: dict, start
         with st.spinner("正在获取行情并计算ATR..."):
             provider = build_data_provider(data_source)
             data = provider.get_daily(symbol, start_date.isoformat(), end_date.isoformat())
-            stock_name = _cached_stock_name_after_run(symbol)
+            stock_name = lookup_stock_name(symbol, allow_remote=True)
             result = calculate_atr_risk(data)
     except Exception as exc:
         st.error(str(exc))
@@ -302,7 +297,7 @@ def main() -> None:
         with st.spinner("正在获取行情并回测..."):
             provider = build_data_provider(data_source)
             data = provider.get_daily(symbol, start_date.isoformat(), end_date.isoformat())
-            stock_name = _cached_stock_name_after_run(symbol)
+            stock_name = lookup_stock_name(symbol, allow_remote=True)
             config = BrokerConfig(buy_commission_rate, sell_commission_rate, min_commission, stamp_tax_rate, slippage_rate)
             result = BacktestEngine(
                 initial_cash,

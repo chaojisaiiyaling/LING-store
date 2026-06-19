@@ -11,40 +11,52 @@ def lookup_stock_name(symbol: str, allow_remote: bool = False) -> str | None:
     clean_symbol = normalize_symbol(symbol)
     if not clean_symbol:
         return None
+    if allow_remote:
+        remote_name = _lookup_single_with_akshare(clean_symbol)
+        if remote_name:
+            return remote_name
     common_name = _lookup_common_name(clean_symbol)
     if common_name:
         return common_name
-    if allow_remote:
-        return _lookup_with_akshare(clean_symbol)
     return None
 
 
-def _lookup_with_akshare(symbol: str) -> str | None:
+def _lookup_single_with_akshare(symbol: str) -> str | None:
     try:
         import akshare as ak
 
-        code_names = ak.stock_info_a_code_name()
+        info = ak.stock_individual_info_em(symbol=symbol)
     except Exception:
         return None
 
-    if code_names.empty:
+    if info.empty:
         return None
 
-    columns = {str(col).lower(): col for col in code_names.columns}
-    code_col = columns.get("code") or columns.get("代码")
-    name_col = columns.get("name") or columns.get("名称")
-    if not code_col or not name_col:
-        return None
+    columns = {str(col).lower(): col for col in info.columns}
+    item_col = columns.get("item") or columns.get("项目")
+    value_col = columns.get("value") or columns.get("值")
+    if item_col and value_col:
+        item_values = info[item_col].astype(str)
+        matched = info.loc[item_values.isin(["股票简称", "股票名称", "名称"])]
+        if not matched.empty:
+            name = matched.iloc[0][value_col]
+            if not pd.isna(name):
+                return str(name)
 
-    normalized_codes = code_names[code_col].astype(str).str.zfill(6)
-    matched = code_names.loc[normalized_codes == symbol]
-    if matched.empty:
-        return None
-
-    name = matched.iloc[0][name_col]
+    name = _extract_name_from_flat_info(info)
     if pd.isna(name):
         return None
     return str(name)
+
+
+def _extract_name_from_flat_info(info: pd.DataFrame):
+    for col in info.columns:
+        col_name = str(col)
+        if col_name in {"股票简称", "股票名称", "名称", "name"}:
+            value = info.iloc[0][col]
+            if not pd.isna(value):
+                return value
+    return None
 
 
 def _lookup_common_name(symbol: str) -> str | None:
