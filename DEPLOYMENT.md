@@ -45,7 +45,7 @@ app.py
 
 ## 4. Secrets 如何填写
 
-第一版只使用 AKShare 免费公开数据，通常不需要 Secrets。
+当前版本支持 AKShare 和 BaoStock 免费公开数据，通常不需要 Secrets。
 
 如果以后接入 Tushare，可以在 Streamlit Cloud 的 `Advanced settings -> Secrets` 中填写：
 

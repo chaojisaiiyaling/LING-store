@@ -4,7 +4,7 @@
 
 ## 功能
 
-- 使用 AKShare 获取 A 股历史日线数据
+- 支持数据接口选择：AKShare 免费公开数据、BaoStock 免费公开数据，Tushare 预留
 - 支持 KDJ 金叉死叉、MACD 金叉死叉、均线策略
 - T 日收盘确认信号，T+1 交易日开盘成交
 - 买入使用可用资金 95%，买入数量按 100 股整数倍
@@ -27,6 +27,12 @@ streamlit run app.py
 浏览器打开 Streamlit 显示的网址即可使用。
 
 ## 策略说明
+
+## 数据接口
+
+- `AKShare免费公开数据`：默认接口，不需要 Token。
+- `BaoStock免费公开数据`：备用免费接口，不需要 Token，适合 AKShare 临时不可用时切换。
+- `Tushare需Token（预留）`：当前版本暂未接入，后续可通过 Secrets 配置 Token。
 
 ### KDJ金叉死叉
 

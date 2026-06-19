@@ -10,7 +10,7 @@ from ashare_backtester.config import (
     DEFAULT_SLIPPAGE_RATE,
     DEFAULT_STAMP_TAX_RATE,
 )
-from ashare_backtester.data.akshare_provider import AKShareDataProvider
+from ashare_backtester.data import DATA_SOURCE_OPTIONS, build_data_provider
 from ashare_backtester.engine.backtest_engine import BacktestEngine
 from ashare_backtester.engine.broker import BrokerConfig
 from ashare_backtester.reports.charts import indicator_chart, nav_chart, price_signal_chart
@@ -140,6 +140,9 @@ def main() -> None:
     st.title("凌氏资本时间空间交易系统")
 
     symbol = st.text_input("股票代码", value="000001", help="例如 000001、600519").strip()
+    data_source = st.selectbox("数据接口", list(DATA_SOURCE_OPTIONS.keys()))
+    selected_source = DATA_SOURCE_OPTIONS[data_source]
+    st.caption(selected_source["description"])
     today = date.today()
     start_date = st.date_input("开始日期", value=today - timedelta(days=365 * 3))
     end_date = st.date_input("结束日期", value=today)
@@ -175,10 +178,13 @@ def main() -> None:
     if start_date >= end_date:
         st.error("开始日期必须早于结束日期。")
         return
+    if not selected_source["enabled"]:
+        st.error("该数据接口当前版本尚未接入，请先选择 AKShare 或 BaoStock。")
+        return
 
     try:
         with st.spinner("正在获取行情并回测..."):
-            provider = AKShareDataProvider()
+            provider = build_data_provider(data_source)
             data = provider.get_daily(symbol, start_date.isoformat(), end_date.isoformat())
             config = BrokerConfig(buy_commission_rate, sell_commission_rate, min_commission, stamp_tax_rate, slippage_rate)
             result = BacktestEngine(

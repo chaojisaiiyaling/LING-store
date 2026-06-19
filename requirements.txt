@@ -3,5 +3,6 @@ pandas>=2.2
 numpy>=1.26
 plotly>=5.22
 akshare>=1.14
+baostock>=0.8.9
 pytest>=8.2
 -e .
