@@ -103,8 +103,8 @@ def _format_price(value: float) -> str:
 
 
 @st.cache_data(ttl=60 * 60 * 6, show_spinner=False)
-def _cached_stock_name(symbol: str) -> str | None:
-    return lookup_stock_name(symbol)
+def _cached_stock_name_after_run(symbol: str) -> str | None:
+    return lookup_stock_name(symbol, allow_remote=True)
 
 
 def _build_strategy(strategy_name: str):
@@ -148,7 +148,7 @@ def _show_strategy_description(strategy_name: str) -> None:
     )
 
 
-def _render_atr_tool(symbol: str, stock_name: str | None, data_source: str, selected_source: dict, start_date: date, end_date: date) -> None:
+def _render_atr_tool(symbol: str, data_source: str, selected_source: dict, start_date: date, end_date: date) -> None:
     st.subheader("ATR止盈止损测算")
     st.markdown(
         """
@@ -175,6 +175,7 @@ def _render_atr_tool(symbol: str, stock_name: str | None, data_source: str, sele
         with st.spinner("正在获取行情并计算ATR..."):
             provider = build_data_provider(data_source)
             data = provider.get_daily(symbol, start_date.isoformat(), end_date.isoformat())
+            stock_name = _cached_stock_name_after_run(symbol)
             result = calculate_atr_risk(data)
     except Exception as exc:
         st.error(str(exc))
@@ -250,9 +251,6 @@ def main() -> None:
 
     feature = st.selectbox("功能选择", ["策略回测", "ATR止盈止损测算"])
     symbol = st.text_input("股票代码", value="000001", help="例如 000001、600519").strip()
-    stock_name = _cached_stock_name(symbol)
-    if stock_name:
-        st.caption(f"已识别：{stock_name}")
     data_source = st.selectbox("数据接口", list(DATA_SOURCE_OPTIONS.keys()))
     selected_source = DATA_SOURCE_OPTIONS[data_source]
     st.caption(selected_source["description"])
@@ -261,7 +259,7 @@ def main() -> None:
     end_date = st.date_input("结束日期", value=today)
 
     if feature == "ATR止盈止损测算":
-        _render_atr_tool(symbol, stock_name, data_source, selected_source, start_date, end_date)
+        _render_atr_tool(symbol, data_source, selected_source, start_date, end_date)
         return
 
     initial_cash = st.number_input("初始资金", min_value=1000.0, value=DEFAULT_INITIAL_CASH, step=10000.0)
@@ -304,6 +302,7 @@ def main() -> None:
         with st.spinner("正在获取行情并回测..."):
             provider = build_data_provider(data_source)
             data = provider.get_daily(symbol, start_date.isoformat(), end_date.isoformat())
+            stock_name = _cached_stock_name_after_run(symbol)
             config = BrokerConfig(buy_commission_rate, sell_commission_rate, min_commission, stamp_tax_rate, slippage_rate)
             result = BacktestEngine(
                 initial_cash,
