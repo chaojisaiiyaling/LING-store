@@ -26,6 +26,24 @@ def _ma(series: pd.Series, window: int) -> pd.Series:
     return series.rolling(window, min_periods=max(2, window // 2)).mean()
 
 
+def _score_range(value: float, good_low: float, good_high: float, soft_low: float, soft_high: float, points: int) -> float:
+    if good_low <= value <= good_high:
+        return points
+    if soft_low <= value < good_low:
+        return points * (value - soft_low) / (good_low - soft_low)
+    if good_high < value <= soft_high:
+        return points * (soft_high - value) / (soft_high - good_high)
+    return 0.0
+
+
+def _apply_signal_cap(score: float, buy_signals: int) -> float:
+    if buy_signals == 0:
+        return min(score, 45)
+    if buy_signals <= 1:
+        return min(score, 75)
+    return score
+
+
 def evaluate_strategy_suitability(bars: pd.DataFrame, strategy_name: str) -> dict[str, object]:
     if bars.empty or "close" not in bars.columns:
         return {
@@ -58,44 +76,52 @@ def evaluate_strategy_suitability(bars: pd.DataFrame, strategy_name: str) -> dic
     bias20 = (close - ma20) / ma20 * 100
     min_bias20 = float(bias20.min()) if bias20.notna().any() else 0.0
     last_above_ma5 = bool(close.iloc[-1] > _ma(close, 5).iloc[-1])
+    buy_signals = int((bars["signal"] == 1).sum()) if "signal" in bars.columns else 0
 
     if strategy_name in TREND_STRATEGIES:
-        score = 45
-        score += 18 if total_return > 0 else -12
-        score += 18 if ma20_slope > 0 else -10
-        score += 14 if above_ma60_ratio > 0.55 else -8
+        score = 20
+        score += 18 if total_return > 0.05 else 9 if total_return > 0 else 0
+        score += 20 if ma20_slope > 0.08 else 12 if ma20_slope > 0.02 else 4 if ma20_slope > 0 else 0
+        score += 18 if above_ma60_ratio > 0.70 else 12 if above_ma60_ratio > 0.55 else 4 if above_ma60_ratio > 0.40 else 0
         score += 12 if ma_alignment else 0
-        score += -12 if max_drawdown < -0.25 else 6
-        score += -8 if volatility > 0.045 else 4
+        score += 10 if max_drawdown > -0.15 else 5 if max_drawdown > -0.25 else 0
+        score += _score_range(volatility, 0.006, 0.035, 0.002, 0.060, 8)
+        score = _apply_signal_cap(score, buy_signals)
         details = [
             f"区间涨跌幅 {total_return * 100:.2f}%",
             f"MA20趋势 {'向上' if ma20_slope > 0 else '偏弱'}",
             f"收盘价在MA60上方占比 {above_ma60_ratio * 100:.0f}%",
+            f"买入信号 {buy_signals} 次",
         ]
         summary = "这类策略更适合趋势清楚、均线向上的股票。"
     elif strategy_name in SHORT_SWING_STRATEGIES:
-        score = 50
-        score += 14 if -0.15 <= total_return <= 0.35 else 4 if total_return > 0.35 else -10
-        score += 16 if 0.012 <= volatility <= 0.045 else -8
-        score += 12 if above_ma20_ratio > 0.42 else -8
-        score += -12 if max_drawdown < -0.30 else 6
+        score = 22
+        score += _score_range(total_return, -0.10, 0.35, -0.30, 0.70, 18)
+        score += _score_range(volatility, 0.012, 0.040, 0.004, 0.070, 22)
+        score += 16 if above_ma20_ratio > 0.55 else 10 if above_ma20_ratio > 0.40 else 4 if above_ma20_ratio > 0.25 else 0
+        score += 12 if max_drawdown > -0.18 else 6 if max_drawdown > -0.32 else 0
+        score += 10 if buy_signals >= 2 else 4 if buy_signals == 1 else 0
         details = [
             f"区间涨跌幅 {total_return * 100:.2f}%",
             f"日波动水平 {volatility * 100:.2f}%",
             f"收盘价在MA20上方占比 {above_ma20_ratio * 100:.0f}%",
+            f"买入信号 {buy_signals} 次",
         ]
         summary = "这类策略更适合有波动、有反弹，但不是单边阴跌的股票。"
     elif strategy_name in REBOUND_STRATEGIES:
-        score = 45
-        score += 22 if min_bias20 <= -5 else -14
-        score += 12 if last_above_ma5 else -6
-        score += 12 if volatility >= 0.015 else -6
-        score += -14 if max_drawdown < -0.40 else 6
-        score += 8 if total_return > -0.25 else -8
+        score = 18
+        score += 24 if min_bias20 <= -8 else 18 if min_bias20 <= -5 else 6 if min_bias20 <= -3 else 0
+        score += 14 if last_above_ma5 else 0
+        score += _score_range(volatility, 0.015, 0.055, 0.006, 0.090, 18)
+        score += 12 if max_drawdown > -0.25 else 6 if max_drawdown > -0.45 else 0
+        score += 10 if total_return > -0.15 else 4 if total_return > -0.35 else 0
+        score += 8 if buy_signals >= 1 else 0
+        score = _apply_signal_cap(score, buy_signals)
         details = [
             f"最低BIAS20 {min_bias20:.2f}",
             f"当前收盘价{'站上' if last_above_ma5 else '未站上'}MA5",
             f"最大回撤 {max_drawdown * 100:.2f}%",
+            f"买入信号 {buy_signals} 次",
         ]
         summary = "这类策略更适合短期超跌后开始修复、但没有持续崩坏的股票。"
     else:
