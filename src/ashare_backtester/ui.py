@@ -180,7 +180,7 @@ def _render_atr_tool(symbol: str, stock_name: str | None, data_source: str, sele
         st.error(str(exc))
         return
 
-    display_symbol = f"{symbol} {stock_name}" if stock_name else symbol
+    display_symbol = f"{symbol}（{stock_name}）" if stock_name else symbol
     st.success("ATR测算完成")
     st.markdown(f"**{display_symbol}** ｜ {start_date.isoformat()} 至 {end_date.isoformat()}")
 
@@ -316,7 +316,7 @@ def main() -> None:
         return
 
     st.success("回测完成")
-    display_symbol = f"{symbol} {stock_name}" if stock_name else symbol
+    display_symbol = f"{symbol}（{stock_name}）" if stock_name else symbol
     st.markdown(f"**{display_symbol}** ｜ {start_date.isoformat()} 至 {end_date.isoformat()} ｜ {result.strategy_name}")
     if not (result.bars["signal"] == 1).any():
         st.info("当前策略参数下未触发买入信号，可尝试选择更保守版本或延长回测周期。")
