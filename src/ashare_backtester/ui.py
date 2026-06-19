@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import date
 
 import streamlit as st
@@ -11,6 +13,7 @@ from ashare_backtester.config import (
     DEFAULT_STAMP_TAX_RATE,
 )
 from ashare_backtester.data import DATA_SOURCE_OPTIONS, build_data_provider
+from ashare_backtester.data.stock_info import lookup_stock_name
 from ashare_backtester.engine.backtest_engine import BacktestEngine
 from ashare_backtester.engine.broker import BrokerConfig
 from ashare_backtester.engine.suitability import evaluate_strategy_suitability
@@ -94,6 +97,11 @@ def _format_money(value: float) -> str:
     return f"¥{value:,.2f}"
 
 
+@st.cache_data(ttl=60 * 60 * 6, show_spinner=False)
+def _cached_stock_name(symbol: str) -> str | None:
+    return lookup_stock_name(symbol)
+
+
 def _build_strategy(strategy_name: str):
     if strategy_name == "KDJ低位金叉":
         period = st.number_input("KDJ周期", min_value=2, max_value=120, value=9, step=1, key="kdj_period")
@@ -169,6 +177,11 @@ def main() -> None:
     st.title("凌氏资本时间空间交易系统")
 
     symbol = st.text_input("股票代码", value="000001", help="例如 000001、600519").strip()
+    stock_name = _cached_stock_name(symbol)
+    if stock_name:
+        st.caption(f"已识别：{stock_name}")
+    elif symbol:
+        st.caption("暂未识别股票名称，不影响继续回测。")
     data_source = st.selectbox("数据接口", list(DATA_SOURCE_OPTIONS.keys()))
     selected_source = DATA_SOURCE_OPTIONS[data_source]
     st.caption(selected_source["description"])
@@ -227,7 +240,8 @@ def main() -> None:
         return
 
     st.success("回测完成")
-    st.markdown(f"**{symbol}** ｜ {start_date.isoformat()} 至 {end_date.isoformat()} ｜ {result.strategy_name}")
+    display_symbol = f"{symbol} {stock_name}" if stock_name else symbol
+    st.markdown(f"**{display_symbol}** ｜ {start_date.isoformat()} 至 {end_date.isoformat()} ｜ {result.strategy_name}")
     if not (result.bars["signal"] == 1).any():
         st.info("当前策略参数下未触发买入信号，可尝试选择更保守版本或延长回测周期。")
 
