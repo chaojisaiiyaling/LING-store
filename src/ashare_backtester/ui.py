@@ -49,6 +49,10 @@ def _format_pct(value: float) -> str:
     return f"{value * 100:.2f}%"
 
 
+def _format_money(value: float) -> str:
+    return f"¥{value:,.2f}"
+
+
 def _build_strategy(strategy_name: str):
     if strategy_name == "KDJ低位金叉":
         period = st.number_input("KDJ周期", min_value=2, max_value=120, value=9, step=1, key="kdj_period")
@@ -173,7 +177,12 @@ def main() -> None:
     st.markdown(f"**{symbol}** ｜ {start_date.isoformat()} 至 {end_date.isoformat()} ｜ {result.strategy_name}")
 
     metrics = result.metrics
+    final_equity = float(result.bars["equity"].iloc[-1])
+    profit_loss = final_equity - float(initial_cash)
+
     col1, col2 = st.columns(2, gap="small")
+    col1.metric("初始资金", _format_money(initial_cash))
+    col2.metric("期末总资产", _format_money(final_equity), delta=_format_money(profit_loss))
     col1.metric("总收益率", _format_pct(metrics["total_return"]))
     col2.metric("年化收益率", _format_pct(metrics["annual_return"]))
     col1.metric("最大回撤", _format_pct(metrics["max_drawdown"]))
