@@ -17,13 +17,13 @@ def sample_df(close):
     )
 
 
-def sample_ohlcv(close, volume):
+def sample_ohlcv(close, volume, low=None):
     return pd.DataFrame(
         {
             "trade_date": pd.date_range("2024-01-01", periods=len(close), freq="D"),
             "open": close,
             "high": [price * 1.02 for price in close],
-            "low": [price * 0.995 for price in close],
+            "low": low if low is not None else [price * 0.995 for price in close],
             "close": close,
             "volume": volume,
             "amount": 10000,
@@ -65,8 +65,20 @@ def test_bullish_pullback_buy_correct():
     result = MAStrategy("bullish_pullback").generate_signals(sample_ohlcv(close, volume))
     row = result.iloc[-1]
     assert row["MA5"] > row["MA10"] > row["MA20"]
-    assert row["volume"] < result["VOL5"].shift(1).iloc[-1]
+    assert row["volume"] <= result["VOL5"].shift(1).iloc[-1] * 1.10
     assert row["signal"] == 1
+
+
+def test_bullish_pullback_buy_after_recent_ma5_touch_correct():
+    close = [10 + i * 0.08 for i in range(20)] + [11.7, 11.9, 12.1, 12.25, 12.4, 12.28, 12.3]
+    volume = [1000] * 20 + [1300, 1250, 1200, 1150, 1100, 900, 1100]
+    low = [price * 0.995 for price in close]
+    low[-2] = 12.0
+    low[-1] = 12.8
+    result = MAStrategy("bullish_pullback").generate_signals(sample_ohlcv(close, volume, low=low))
+    assert result["low"].iloc[-1] > result["MA5"].iloc[-1] * 1.02
+    assert result["volume"].iloc[-1] <= result["VOL5"].shift(1).iloc[-1] * 1.10
+    assert result["signal"].iloc[-1] == 1
 
 
 def test_bullish_pullback_sell_on_volume_stall_correct():

@@ -74,11 +74,13 @@ class MAStrategy(Strategy):
         result["BIAS20"] = (result["close"] - result["MA20"]) / result["MA20"] * 100
 
         bullish = (result["MA5"] > result["MA10"]) & (result["MA10"] > result["MA20"])
-        touched_ma5 = result["low"] <= result["MA5"] * 1.01
-        recovered_ma5 = result["close"] >= result["MA5"]
-        shrink_volume = result["volume"] < result["VOL5"].shift(1)
-        close_up = result["close"] > result["close"].shift(1)
-        raw_buy = bullish & touched_ma5 & recovered_ma5 & shrink_volume & close_up
+        touched_ma5 = result["low"] <= result["MA5"] * 1.02
+        recent_touched_ma5 = touched_ma5.rolling(3, min_periods=1).max().astype(bool)
+        close_near_ma5 = result["close"] >= result["MA5"] * 0.99
+        shrink_volume = result["volume"] <= result["VOL5"].shift(1) * 1.10
+        not_weak = result["close"] >= result["close"].shift(1) * 0.995
+        not_extended = result["BIAS20"] <= 12
+        raw_buy = bullish & recent_touched_ma5 & close_near_ma5 & shrink_volume & not_weak & not_extended
 
         daily_return = result["close"] / result["close"].shift(1) - 1
         volume_surge = result["volume"] > result["VOL5"].shift(1) * 1.5
@@ -91,7 +93,7 @@ class MAStrategy(Strategy):
         )
 
         result.loc[raw_buy, "signal"] = 1
-        result.loc[raw_sell, "signal"] = -1
+        result.loc[raw_sell & ~raw_buy, "signal"] = -1
         return result
 
     def _generate_bias_signals(self, result: pd.DataFrame) -> pd.DataFrame:
