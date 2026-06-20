@@ -81,6 +81,34 @@ def test_bullish_pullback_buy_after_recent_ma5_touch_correct():
     assert result["signal"].iloc[-1] == 1
 
 
+def test_bullish_pullback_conservative_is_stricter_than_standard():
+    close = [10 + i * 0.08 for i in range(20)] + [11.7, 11.9, 12.1, 12.25, 12.4, 12.28, 12.3]
+    volume = [1000] * 20 + [1300, 1250, 1200, 1150, 1100, 900, 1100]
+    low = [price * 0.995 for price in close]
+    low[-2] = 12.0
+    low[-1] = 12.8
+    df = sample_ohlcv(close, volume, low=low)
+    conservative = MAStrategy("bullish_pullback_conservative").generate_signals(df)
+    standard = MAStrategy("bullish_pullback_standard").generate_signals(df)
+    assert conservative["signal"].iloc[-1] == 0
+    assert standard["signal"].iloc[-1] == 1
+
+
+def test_bullish_pullback_aggressive_is_looser_than_standard():
+    close = [10 + i * 0.08 for i in range(20)] + [11.7, 11.9, 12.1, 12.25, 12.4, 12.18, 12.22]
+    volume = [1000] * 20 + [1300, 1250, 1200, 1150, 1100, 900, 1220]
+    low = [price * 0.995 for price in close]
+    low[-5] = 11.95
+    low[-3] = 12.8
+    low[-2] = 12.8
+    low[-1] = 12.8
+    df = sample_ohlcv(close, volume, low=low)
+    standard = MAStrategy("bullish_pullback_standard").generate_signals(df)
+    aggressive = MAStrategy("bullish_pullback_aggressive").generate_signals(df)
+    assert standard["signal"].iloc[-1] == 0
+    assert aggressive["signal"].iloc[-1] == 1
+
+
 def test_bullish_pullback_sell_on_volume_stall_correct():
     close = [10 + i * 0.08 for i in range(20)] + [11.7, 11.9, 12.1, 12.25, 12.4, 12.25, 12.35, 12.42]
     volume = [1000] * 20 + [1300, 1250, 1200, 1150, 1100, 900, 700, 2200]
