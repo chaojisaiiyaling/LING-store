@@ -90,6 +90,14 @@ STRATEGY_DESCRIPTIONS = {
 }
 
 
+STRATEGY_GROUPS = {
+    "回踩类": ["均线多头缩量回踩MA5"],
+    "趋势类": ["MACD零轴上方金叉", "MA5/MA20趋势突破"],
+    "超跌反弹类": ["BIAS20超跌反弹-保守", "BIAS20超跌反弹-标准", "BIAS20超跌反弹-激进"],
+    "指标金叉类": ["KDJ低位金叉", "MA5/MA10短线金叉"],
+}
+
+
 def _format_pct(value: float) -> str:
     return f"{value * 100:.2f}%"
 
@@ -258,10 +266,8 @@ def main() -> None:
         return
 
     initial_cash = st.number_input("初始资金", min_value=1000.0, value=DEFAULT_INITIAL_CASH, step=10000.0)
-    strategy_name = st.selectbox(
-        "策略选择",
-        list(STRATEGY_DESCRIPTIONS.keys()),
-    )
+    strategy_category = st.selectbox("策略类型", list(STRATEGY_GROUPS.keys()))
+    strategy_name = st.selectbox("具体策略", STRATEGY_GROUPS[strategy_category])
 
     st.subheader("策略说明")
     _show_strategy_description(strategy_name)
