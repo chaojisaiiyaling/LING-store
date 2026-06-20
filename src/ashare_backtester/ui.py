@@ -55,14 +55,6 @@ STRATEGY_DESCRIPTIONS = {
         "avoid": "不太适合没有方向的箱体震荡股，容易反复买入卖出。",
         "risk": "突破失败时会回撤，且均线策略天然有滞后。",
     },
-    "MA5/MA10/MA20多头排列": {
-        "buy": "MA5 > MA10 > MA20，且收盘价大于MA5",
-        "sell": "收盘价跌破MA20，或MA5下穿MA10",
-        "scene": "强趋势跟随，尽量吃一段主升行情。",
-        "fit": "适合强势趋势股、机构抱团股、行业景气上行股票，尤其是均线顺畅向上的标的。",
-        "avoid": "不太适合超跌反弹股、低位横盘股和频繁上下影线的震荡股。",
-        "risk": "入场通常不在最低点，趋势结束时也可能回吐一部分利润。",
-    },
     "均线多头缩量回踩MA5": {
         "buy": "MA5 > MA10 > MA20；最低价回踩到MA5附近；收盘价重新站上MA5；成交量低于前5日均量；收盘价高于昨日收盘价",
         "sell": "放量滞涨；或BIAS20大于12；或收盘价跌破MA10；或MA5下穿MA10",
@@ -126,7 +118,6 @@ def _build_strategy(strategy_name: str):
     mode = {
         "MA5/MA10短线金叉": "ma5_ma10",
         "MA5/MA20趋势突破": "ma5_ma20",
-        "MA5/MA10/MA20多头排列": "bullish",
         "均线多头缩量回踩MA5": "bullish_pullback",
         "BIAS20超跌反弹-保守": "bias_conservative",
         "BIAS20超跌反弹-标准": "bias_standard",
