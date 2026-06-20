@@ -45,6 +45,7 @@ class MAStrategy(Strategy):
             "ma5_ma10": "MA5/MA10短线金叉",
             "ma5_ma20": "MA5/MA20趋势突破",
             "bullish": "MA5/MA10/MA20多头排列",
+            "bullish_pullback": "均线多头缩量回踩MA5",
             **{mode_name: config["name"] for mode_name, config in BIAS_CONFIGS.items()},
         }[mode]
 
@@ -62,8 +63,35 @@ class MAStrategy(Strategy):
             was_bullish = bullish.shift(1, fill_value=False)
             result.loc[(~was_bullish) & bullish, "signal"] = 1
             result.loc[(result["close"] < result["MA20"]) | cross_down(result["MA5"], result["MA10"]), "signal"] = -1
+        elif self.mode == "bullish_pullback":
+            result = self._generate_bullish_pullback_signals(result)
         else:
             result = self._generate_bias_signals(result)
+        return result
+
+    def _generate_bullish_pullback_signals(self, result: pd.DataFrame) -> pd.DataFrame:
+        result["VOL5"] = result["volume"].rolling(5, min_periods=1).mean()
+        result["BIAS20"] = (result["close"] - result["MA20"]) / result["MA20"] * 100
+
+        bullish = (result["MA5"] > result["MA10"]) & (result["MA10"] > result["MA20"])
+        touched_ma5 = result["low"] <= result["MA5"] * 1.01
+        recovered_ma5 = result["close"] >= result["MA5"]
+        shrink_volume = result["volume"] < result["VOL5"].shift(1)
+        close_up = result["close"] > result["close"].shift(1)
+        raw_buy = bullish & touched_ma5 & recovered_ma5 & shrink_volume & close_up
+
+        daily_return = result["close"] / result["close"].shift(1) - 1
+        volume_surge = result["volume"] > result["VOL5"].shift(1) * 1.5
+        price_stall = daily_return < 0.01
+        raw_sell = (
+            (volume_surge & price_stall)
+            | (result["BIAS20"] > 12)
+            | (result["close"] < result["MA10"])
+            | cross_down(result["MA5"], result["MA10"])
+        )
+
+        result.loc[raw_buy, "signal"] = 1
+        result.loc[raw_sell, "signal"] = -1
         return result
 
     def _generate_bias_signals(self, result: pd.DataFrame) -> pd.DataFrame:

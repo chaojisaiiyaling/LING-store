@@ -17,6 +17,20 @@ def sample_df(close):
     )
 
 
+def sample_ohlcv(close, volume):
+    return pd.DataFrame(
+        {
+            "trade_date": pd.date_range("2024-01-01", periods=len(close), freq="D"),
+            "open": close,
+            "high": [price * 1.02 for price in close],
+            "low": [price * 0.995 for price in close],
+            "close": close,
+            "volume": volume,
+            "amount": 10000,
+        }
+    )
+
+
 def test_ma5_cross_ma10_correct():
     df = sample_df([10, 10, 10, 10, 10, 9, 8, 7, 6, 5, 20, 20])
     result = MAStrategy("ma5_ma10").generate_signals(df)
@@ -42,6 +56,33 @@ def test_bullish_sell_on_close_below_ma20_or_ma5_cross_ma10():
     df = sample_df([10] * 20 + [12, 14, 16, 18, 20, 8])
     result = MAStrategy("bullish").generate_signals(df)
     assert result["close"].iloc[-1] < result["MA20"].iloc[-1]
+    assert result["signal"].iloc[-1] == -1
+
+
+def test_bullish_pullback_buy_correct():
+    close = [10 + i * 0.08 for i in range(20)] + [11.7, 11.9, 12.1, 12.25, 12.4, 12.25, 12.35]
+    volume = [1000] * 20 + [1300, 1250, 1200, 1150, 1100, 900, 700]
+    result = MAStrategy("bullish_pullback").generate_signals(sample_ohlcv(close, volume))
+    row = result.iloc[-1]
+    assert row["MA5"] > row["MA10"] > row["MA20"]
+    assert row["volume"] < result["VOL5"].shift(1).iloc[-1]
+    assert row["signal"] == 1
+
+
+def test_bullish_pullback_sell_on_volume_stall_correct():
+    close = [10 + i * 0.08 for i in range(20)] + [11.7, 11.9, 12.1, 12.25, 12.4, 12.25, 12.35, 12.42]
+    volume = [1000] * 20 + [1300, 1250, 1200, 1150, 1100, 900, 700, 2200]
+    result = MAStrategy("bullish_pullback").generate_signals(sample_ohlcv(close, volume))
+    assert result["volume"].iloc[-1] > result["VOL5"].shift(1).iloc[-1] * 1.5
+    assert result["close"].iloc[-1] / result["close"].iloc[-2] - 1 < 0.01
+    assert result["signal"].iloc[-1] == -1
+
+
+def test_bullish_pullback_sell_on_excessive_bias_correct():
+    close = [10 + i * 0.08 for i in range(20)] + [11.7, 11.9, 12.1, 12.25, 12.4, 12.25, 12.35, 14.2]
+    volume = [1000] * 20 + [1300, 1250, 1200, 1150, 1100, 900, 700, 900]
+    result = MAStrategy("bullish_pullback").generate_signals(sample_ohlcv(close, volume))
+    assert result["BIAS20"].iloc[-1] > 12
     assert result["signal"].iloc[-1] == -1
 
 
