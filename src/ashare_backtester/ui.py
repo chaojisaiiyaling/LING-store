@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
+import pandas as pd
 import streamlit as st
 
 from ashare_backtester.config import (
@@ -152,6 +153,29 @@ def _build_strategy(strategy_name: str):
     return MAStrategy(mode)
 
 
+def _build_strategy_with_defaults(strategy_name: str):
+    if strategy_name == "KDJ低位金叉":
+        return KDJStrategy()
+    if strategy_name == "MACD零轴上方金叉":
+        return MACDStrategy()
+    return MAStrategy(
+        {
+            "MA5/MA10短线金叉": "ma5_ma10",
+            "MA5/MA20趋势突破": "ma5_ma20",
+            "均线多头缩量回踩MA5-保守": "bullish_pullback_conservative",
+            "均线多头缩量回踩MA5-标准": "bullish_pullback_standard",
+            "均线多头缩量回踩MA5-激进": "bullish_pullback_aggressive",
+            "BIAS20超跌反弹-保守": "bias_conservative",
+            "BIAS20超跌反弹-标准": "bias_standard",
+            "BIAS20超跌反弹-激进": "bias_aggressive",
+        }[strategy_name]
+    )
+
+
+def _all_strategy_names() -> list[str]:
+    return [strategy_name for names in STRATEGY_GROUPS.values() for strategy_name in names]
+
+
 def _show_strategy_description(strategy_name: str) -> None:
     description = STRATEGY_DESCRIPTIONS[strategy_name]
     st.markdown(
@@ -167,6 +191,101 @@ def _show_strategy_description(strategy_name: str) -> None:
         """,
         unsafe_allow_html=True,
     )
+
+
+def _render_strategy_comparison(
+    symbol: str,
+    data_source: str,
+    selected_source: dict,
+    start_date: date,
+    end_date: date,
+    initial_cash: float,
+    broker_config: BrokerConfig,
+    stop_loss_pct: float | None,
+    take_profit_pct: float | None,
+) -> None:
+    st.subheader("策略对比")
+    rank_label = st.selectbox("排名依据", ["总收益率", "年化收益率", "夏普比率", "最大回撤"])
+    st.markdown(
+        """
+        <div class="strategy-note">
+          <div><strong>说明：</strong>系统会用同一只股票、同一回测区间、同一交易成本，自动回测当前全部固定策略。</div>
+          <div><strong>注意：</strong>这里不是参数优化，只是横向比较现有策略。历史表现最好不代表未来最好。</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    run = st.button("开始策略对比", use_container_width=True, type="primary")
+    if not run:
+        return
+
+    if start_date >= end_date:
+        st.error("开始日期必须早于结束日期。")
+        return
+    if not selected_source["enabled"]:
+        st.error("该数据接口当前版本尚未接入，请先选择 AKShare 或 BaoStock。")
+        return
+
+    try:
+        with st.spinner("正在获取行情并批量回测策略..."):
+            provider = build_data_provider(data_source)
+            data = provider.get_daily(symbol, start_date.isoformat(), end_date.isoformat())
+            stock_name = lookup_stock_name(symbol, allow_remote=True)
+            rows = []
+            for strategy_name in _all_strategy_names():
+                strategy = _build_strategy_with_defaults(strategy_name)
+                result = BacktestEngine(
+                    initial_cash,
+                    broker_config,
+                    stop_loss_pct=stop_loss_pct,
+                    take_profit_pct=take_profit_pct,
+                ).run(data.copy(), strategy, symbol=symbol)
+                metrics = result.metrics
+                rows.append(
+                    {
+                        "策略名称": result.strategy_name,
+                        "总收益率": metrics["total_return"],
+                        "年化收益率": metrics["annual_return"],
+                        "最大回撤": metrics["max_drawdown"],
+                        "夏普比率": metrics["sharpe"],
+                        "胜率": metrics["win_rate"],
+                        "交易次数": metrics["trade_count"],
+                        "买入信号数": int((result.bars["signal"] == 1).sum()),
+                        "期末总资产": float(result.bars["equity"].iloc[-1]),
+                        "买入并持有收益率": result.buy_hold_return,
+                    }
+                )
+            comparison = pd.DataFrame(rows)
+    except Exception as exc:
+        st.error(str(exc))
+        return
+
+    rank_column = {
+        "总收益率": "总收益率",
+        "年化收益率": "年化收益率",
+        "夏普比率": "夏普比率",
+        "最大回撤": "最大回撤",
+    }[rank_label]
+    ranked = comparison.sort_values(rank_column, ascending=False).reset_index(drop=True)
+    best = ranked.iloc[0]
+    worst = ranked.iloc[-1]
+
+    display_symbol = f"{symbol}（{stock_name}）" if stock_name else symbol
+    st.success("策略对比完成")
+    st.markdown(f"**{display_symbol}** ｜ {start_date.isoformat()} 至 {end_date.isoformat()} ｜ 共 {len(comparison)} 个策略")
+
+    col1, col2 = st.columns(2, gap="small")
+    col1.metric("最好策略", best["策略名称"], delta=_format_pct(float(best[rank_column])) if rank_column != "夏普比率" else f"{best[rank_column]:.2f}")
+    col2.metric("最差策略", worst["策略名称"], delta=_format_pct(float(worst[rank_column])) if rank_column != "夏普比率" else f"{worst[rank_column]:.2f}")
+
+    st.subheader("完整排名")
+    display = ranked.copy()
+    for column in ["总收益率", "年化收益率", "最大回撤", "胜率", "买入并持有收益率"]:
+        display[column] = display[column].map(_format_pct)
+    display["夏普比率"] = display["夏普比率"].map(lambda value: f"{value:.2f}")
+    display["期末总资产"] = display["期末总资产"].map(_format_money)
+    st.dataframe(display, use_container_width=True, hide_index=True)
 
 
 def _render_atr_tool(symbol: str, data_source: str, selected_source: dict, start_date: date, end_date: date) -> None:
@@ -270,7 +389,7 @@ def main() -> None:
     )
     st.title("凌氏资本时间空间交易系统")
 
-    feature = st.selectbox("功能选择", ["策略回测", "ATR止盈止损测算"])
+    feature = st.selectbox("功能选择", ["策略回测", "策略对比", "ATR止盈止损测算"])
     symbol = st.text_input("股票代码", value="000001", help="例如 000001、600519").strip()
     data_source = st.selectbox("数据接口", list(DATA_SOURCE_OPTIONS.keys()))
     selected_source = DATA_SOURCE_OPTIONS[data_source]
@@ -284,15 +403,6 @@ def main() -> None:
         return
 
     initial_cash = st.number_input("初始资金", min_value=1000.0, value=DEFAULT_INITIAL_CASH, step=10000.0)
-    strategy_category = st.selectbox("策略类型", list(STRATEGY_GROUPS.keys()))
-    strategy_name = st.selectbox("具体策略", STRATEGY_GROUPS[strategy_category])
-
-    st.subheader("策略说明")
-    _show_strategy_description(strategy_name)
-
-    st.subheader("策略参数")
-    strategy = _build_strategy(strategy_name)
-
     with st.expander("高级设置", expanded=False):
         buy_commission_rate = st.number_input("买入佣金率", min_value=0.0, value=DEFAULT_BUY_COMMISSION_RATE, format="%.6f")
         sell_commission_rate = st.number_input("卖出佣金率", min_value=0.0, value=DEFAULT_SELL_COMMISSION_RATE, format="%.6f")
@@ -305,6 +415,33 @@ def main() -> None:
         if use_risk_control:
             stop_loss_pct = st.number_input("止损比例", min_value=0.0, max_value=0.8, value=0.08, step=0.01, format="%.2f")
             take_profit_pct = st.number_input("止盈比例", min_value=0.0, max_value=3.0, value=0.20, step=0.01, format="%.2f")
+
+    config = BrokerConfig(buy_commission_rate, sell_commission_rate, min_commission, stamp_tax_rate, slippage_rate)
+    active_stop_loss = stop_loss_pct if use_risk_control and stop_loss_pct > 0 else None
+    active_take_profit = take_profit_pct if use_risk_control and take_profit_pct > 0 else None
+
+    if feature == "策略对比":
+        _render_strategy_comparison(
+            symbol,
+            data_source,
+            selected_source,
+            start_date,
+            end_date,
+            initial_cash,
+            config,
+            active_stop_loss,
+            active_take_profit,
+        )
+        return
+
+    strategy_category = st.selectbox("策略类型", list(STRATEGY_GROUPS.keys()))
+    strategy_name = st.selectbox("具体策略", STRATEGY_GROUPS[strategy_category])
+
+    st.subheader("策略说明")
+    _show_strategy_description(strategy_name)
+
+    st.subheader("策略参数")
+    strategy = _build_strategy(strategy_name)
 
     run = st.button("开始回测", use_container_width=True, type="primary")
     if not run:
@@ -322,12 +459,11 @@ def main() -> None:
             provider = build_data_provider(data_source)
             data = provider.get_daily(symbol, start_date.isoformat(), end_date.isoformat())
             stock_name = lookup_stock_name(symbol, allow_remote=True)
-            config = BrokerConfig(buy_commission_rate, sell_commission_rate, min_commission, stamp_tax_rate, slippage_rate)
             result = BacktestEngine(
                 initial_cash,
                 config,
-                stop_loss_pct=stop_loss_pct if use_risk_control and stop_loss_pct > 0 else None,
-                take_profit_pct=take_profit_pct if use_risk_control and take_profit_pct > 0 else None,
+                stop_loss_pct=active_stop_loss,
+                take_profit_pct=active_take_profit,
             ).run(data, strategy, symbol=symbol)
     except Exception as exc:
         st.error(str(exc))
