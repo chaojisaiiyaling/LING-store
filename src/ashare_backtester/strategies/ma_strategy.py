@@ -118,13 +118,12 @@ class MAStrategy(Strategy):
         result["BIAS20"] = (result["close"] - result["MA20"]) / result["MA20"] * 100
 
         bullish = (result["MA5"] > result["MA10"]) & (result["MA10"] > result["MA20"])
-        touched_ma5 = result["low"] <= result["MA5"] * config["touch_pct"]
-        recent_touched_ma5 = touched_ma5.rolling(config["lookback"], min_periods=1).max().astype(bool)
+        touched_ma5_today = result["low"] <= result["MA5"] * config["touch_pct"]
         close_near_ma5 = result["close"] >= result["MA5"] * config["close_ma_pct"]
         shrink_volume = result["volume"] <= result["VOL5"].shift(1) * config["volume_pct"]
         not_weak = result["close"] >= result["close"].shift(1) * config["weak_pct"]
         not_extended = result["BIAS20"] <= config["buy_bias_limit"]
-        raw_buy = bullish & recent_touched_ma5 & close_near_ma5 & shrink_volume & not_weak & not_extended
+        raw_buy = bullish & touched_ma5_today & close_near_ma5 & shrink_volume & not_weak & not_extended
 
         daily_return = result["close"] / result["close"].shift(1) - 1
         volume_surge = result["volume"] > result["VOL5"].shift(1) * 1.5
